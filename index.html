@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Cocktail Collection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --parchment: #fdf6e3;
+            --ink: #2c1e14;
+            --accent: #8b0000;
+            --card-bg: #fffef8;
+        }
+
+        body {
+            background-color: var(--parchment);
+            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
+            color: var(--ink);
+            font-family: 'Lato', sans-serif;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .drink-card {
+            background: var(--card-bg);
+            border: 1px solid #d3c6a6;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .drink-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 15px 15px 30px rgba(0,0,0,0.1);
+            border-color: var(--accent);
+        }
+
+        .modal-overlay {
+            background-color: rgba(44, 30, 20, 0.85);
+            backdrop-filter: blur(4px);
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid var(--accent);
+        }
+
+        .close-btn {
+            color: var(--accent);
+            font-size: 2rem;
+            line-height: 1;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--parchment); }
+        ::-webkit-scrollbar-thumb { background: #d3c6a6; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <header class="text-center mb-12 py-10">
+        <h1 class="text-5xl md:text-7xl font-bold mb-4 text-[#5d0000]">The Cocktail Collection</h1>
+        <div class="w-32 h-1 bg-[#8b0000] mx-auto mb-4"></div>
+        <p class="text-xl italic opacity-80">Hand-crafted recipes for the discerning palate</p>
+    </header>
+
+    <main id="menu-grid" class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        <!-- Cards injected by JS -->
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content rounded-lg shadow-2xl relative p-6 md:p-10" onclick="event.stopPropagation()">
+            <button class="close-btn absolute top-4 right-6 hover:scale-110 transition-transform" onclick="closeModal()">×</button>
+            
+            <div id="modal-details" class="flex flex-col md:flex-row gap-8">
+                <!-- Details injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center mt-20 pb-10 opacity-60 text-sm">
+        <p>&copy; 2024 The Watercolor Bar. Crafted with passion.</p>
+    </footer>
+
+    <script>
+        const drinks = [
+            { id: "sex_on_the_beach", name: "Sex on the Beach", ingredients: ["1.5 oz Vodka", "0.5 oz Peach Schnapps", "2 oz Orange juice", "2 oz Cranberry juice"], instructions: "Combine all ingredients in a shaker with ice. Shake well and strain into a highball glass. Garnish with an orange slice." },
+            { id: "mojito", name: "Mojito", ingredients: ["2 oz White Rum", "1 oz Lime juice", "2 tsp Sugar", "6-8 Mint leaves", "Soda water"], instructions: "Muddle mint and sugar with lime juice. Add rum and top with soda water and crushed ice. Garnish with more mint." },
+            { id: "pina_colada", name: "Piña Colada", ingredients: ["2 oz Light Rum", "1.5 oz Cream of coconut", "1.5 oz Pineapple juice"], instructions: "Blend all ingredients with crushed ice until smooth. Pour into a chilled glass and garnish with a cherry." },
+            { id: "kir", name: "Kir", ingredients: ["3 oz Dry White Wine", "0.5 oz Crème de Cassis"], instructions: "Add the Crème de Cassis to the bottom of a wine glass, then top with chilled white wine. Stir gently." },
+            { id: "whiskey_coke", name: "Whiskey Coke", ingredients: ["2 oz Whiskey", "4-6 oz Coca-Cola", "Lemon wedge"], instructions: "Fill a glass with ice. Pour in the whiskey, top with cola, and stir gently. Garnish with lemon." },
+            { id: "blackcurrant_milk", name: "Blackcurrant Milk", ingredients: ["1.5 oz Blackcurrant Liqueur", "4 oz Chilled Milk", "Fresh berries"], instructions: "Pour liqueur over ice, top with cold milk, and stir slowly to create a marbled effect. Garnish with berries." },
+            { id: "cuba_libre", name: "Cuba Libre", ingredients: ["2 oz Light Rum", "4 oz Cola", "0.5 oz Fresh lime juice"], instructions: "Squeeze lime into a glass, add ice, rum, and cola. Stir briefly and serve with the lime wedge." },
+            { id: "moscow_mule", name: "Moscow Mule", ingredients: ["2 oz Vodka", "4 oz Ginger beer", "0.5 oz Lime juice"], instructions: "Combine vodka and lime juice in a copper mug filled with ice. Top with ginger beer and stir." },
+            { id: "blackcurrant_orange", name: "Blackcurrant OJ", ingredients: ["1.5 oz Blackcurrant Liqueur", "4 oz Fresh Orange Juice"], instructions: "Fill a tall glass with ice. Pour in the orange juice and float the liqueur on top for a sunset effect." },
+            { id: "screwdriver", name: "Screwdriver", ingredients: ["2 oz Vodka", "4 oz Orange juice"], instructions: "Pour vodka and orange juice into a highball glass over ice. Stir well and garnish with an orange slice." },
+            { id: "whiskey_highball", name: "Whiskey Highball", ingredients: ["2 oz Whiskey", "4 oz Club soda", "Lemon peel"], instructions: "Fill a tall glass with ice. Add whiskey, top with soda, and stir once. Express lemon peel over the top." },
+            { id: "whiskey_sour", name: "Whiskey Sour", ingredients: ["2 oz Bourbon", "0.75 oz Lemon juice", "0.5 oz Simple syrup", "Cherry"], instructions: "Shake all ingredients with ice. Strain into a glass over fresh ice. Garnish with a cherry." }
+        ];
+
+        const grid = document.getElementById('menu-grid');
+        const modal = document.getElementById('modal');
+        const modalDetails = document.getElementById('modal-details');
+
+        // Render the Grid
+        function renderMenu() {
+            grid.innerHTML = drinks.map(drink => `
+                <div class="drink-card p-4 rounded-lg flex flex-col items-center cursor-pointer" onclick="openModal('${drink.id}')">
+                    <div class="w-full aspect-[4/5] overflow-hidden rounded mb-4 bg-white/50">
+                        <img src="${drink.id}.jpg" alt="${drink.name}" class="w-full h-full object-contain" onerror="this.src='https://via.placeholder.com/300x400?text=${drink.name.replace(/ /g, '+')}'">
+                    </div>
+                    <h3 class="text-2xl text-center font-bold">${drink.name}</h3>
+                </div>
+            `).join('');
+        }
+
+        function openModal(id) {
+            const drink = drinks.find(d => d.id === id);
+            if (!drink) return;
+
+            modalDetails.innerHTML = `
+                <div class="w-full md:w-1/2">
+                    <img src="${drink.id}.jpg" alt="${drink.name}" class="w-full rounded shadow-lg border border-[#d3c6a6]" onerror="this.src='https://via.placeholder.com/400x500?text=${drink.name.replace(/ /g, '+')}'">
+                </div>
+                <div class="w-full md:w-1/2 flex flex-col justify-center">
+                    <h2 class="text-4xl font-bold text-[#8b0000] mb-6">${drink.name}</h2>
+                    <div class="mb-6">
+                        <h4 class="font-bold text-lg mb-2 underline decoration-[#8b0000]">Ingredients</h4>
+                        <ul class="list-disc list-inside space-y-1 opacity-90">
+                            ${drink.ingredients.map(ing => `<li>${ing}</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg mb-2 underline decoration-[#8b0000]">Instructions</h4>
+                        <p class="leading-relaxed opacity-90 italic">"${drink.instructions}"</p>
+                    </div>
+                </div>
+            `;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // Stop scrolling
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto'; // Resume scrolling
+        }
+
+        // Initialize
+        renderMenu();
+    </script>
+</body>
+</html>
