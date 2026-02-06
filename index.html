@@ -100,7 +100,7 @@
             <!-- Tally will be injected here -->
         </div>
         <div class="text-center mt-6">
-            <button onclick="clearAllOrders()" class="text-xs text-[#8b0000] underline opacity-60 hover:opacity-100">Reset All Orders</button>
+            <button onclick="window.clearAllOrders()" class="text-xs text-[#8b0000] underline opacity-60 hover:opacity-100">Reset All Orders</button>
         </div>
     </section>
 
@@ -109,9 +109,9 @@
     </main>
 
     <!-- Modal -->
-    <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+    <div id="modal" class="modal-overlay" onclick="window.closeModal(event)">
         <div class="modal-content rounded-lg shadow-2xl relative p-6 md:p-10" onclick="event.stopPropagation()">
-            <button class="close-btn absolute top-4 right-6 hover:scale-110 transition-transform" onclick="closeModal()">×</button>
+            <button class="close-btn absolute top-4 right-6 hover:scale-110 transition-transform" onclick="window.closeModal()">×</button>
             
             <div id="modal-details" class="flex flex-col md:flex-row gap-8 mb-8">
                 <!-- Details injected by JS -->
@@ -135,15 +135,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase Configuration
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        let currentUser = null;
-
+        // Constants and State
         const drinks = [
             { id: "sex_on_the_beach", name: "Sex on the Beach", ingredients: ["1.5 oz Vodka", "0.5 oz Peach Schnapps", "2 oz Orange juice", "2 oz Cranberry juice"], instructions: "Combine all ingredients in a shaker with ice. Shake well and strain into a highball glass. Garnish with an orange slice." },
             { id: "mojito", name: "Mojito", ingredients: ["2 oz White Rum", "1 oz Lime juice", "2 tsp Sugar", "6-8 Mint leaves", "Soda water"], instructions: "Muddle mint and sugar with lime juice. Add rum and top with soda water and crushed ice. Garnish with more mint." },
@@ -165,23 +157,12 @@
         const summarySection = document.getElementById('order-summary');
         const summaryList = document.getElementById('summary-list');
 
-        // Auth Setup
-        async function initAuth() {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
-            }
-        }
+        let currentUser = null;
+        let db = null;
+        let auth = null;
+        let appId = 'default-app-id';
 
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user) {
-                setupOrderListener();
-            }
-        });
-
-        // Initialize Menu
+        // 1. Render Menu Immediately (Doesn't depend on Firebase)
         function renderMenu() {
             grid.innerHTML = drinks.map(drink => `
                 <div class="drink-card p-4 rounded-lg flex flex-col items-center cursor-pointer relative" onclick="window.openDrinkModal('${drink.id}')">
@@ -194,6 +175,7 @@
             `).join('');
         }
 
+        // 2. Setup Global Handlers
         window.openDrinkModal = function(id) {
             const drink = drinks.find(d => d.id === id);
             if (!drink) return;
@@ -225,14 +207,44 @@
             document.body.style.overflow = 'hidden';
         };
 
-        window.closeModal = function(event) {
+        window.closeModal = function() {
             modal.style.display = 'none';
             document.body.style.overflow = 'auto';
         };
 
-        // Order Logic
+        // 3. Firebase Initialization (Safe Mode)
+        async function startFirebase() {
+            try {
+                if (typeof __firebase_config === 'undefined') return;
+                
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        setupOrderListener();
+                    }
+                });
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Firebase fail:", err);
+            }
+        }
+
         async function placeOrder(drink) {
-            if (!currentUser) return;
+            if (!db || !currentUser) {
+                alert("Order system is still loading or unavailable. Please refresh.");
+                return;
+            }
             try {
                 const btn = document.getElementById('place-order-btn');
                 btn.disabled = true;
@@ -248,7 +260,7 @@
                 
                 btn.innerText = "Success! ✨";
                 setTimeout(() => {
-                    closeModal();
+                    window.closeModal();
                     btn.disabled = false;
                 }, 800);
             } catch (err) {
@@ -287,7 +299,6 @@
                 summarySection.classList.add('hidden');
             }
 
-            // Update badges on cards
             drinks.forEach(drink => {
                 const badge = document.getElementById(`badge-${drink.id}`);
                 if (tallies[drink.id]) {
@@ -300,16 +311,16 @@
         }
 
         window.clearAllOrders = async function() {
-            if (!currentUser) return;
+            if (!db || !currentUser) return;
             const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
             const qSnap = await getDocs(ordersCol);
             const deletePromises = qSnap.docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', d.id)));
             await Promise.all(deletePromises);
         };
 
-        // Start everything
+        // Execution Start
         renderMenu();
-        initAuth();
+        startFirebase();
 
     </script>
 </body>
