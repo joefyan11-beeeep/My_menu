@@ -21,7 +21,7 @@
             font-family: 'Lato', sans-serif;
         }
 
-        h1, h2, h3 {
+        h1, h2, h3, h4 {
             font-family: 'Playfair Display', serif;
         }
 
@@ -66,6 +66,18 @@
             line-height: 1;
         }
 
+        .order-badge {
+            background: var(--accent);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            position: absolute;
+            top: -10px;
+            right: -10px;
+        }
+
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--parchment); }
@@ -81,6 +93,17 @@
         <p class="text-xl italic opacity-80">Hand-crafted recipes for the discerning palate</p>
     </header>
 
+    <!-- Real-time Order Summary for the Host -->
+    <section id="order-summary" class="max-w-4xl mx-auto mb-12 p-6 border-2 border-dashed border-[#d3c6a6] rounded-xl hidden">
+        <h2 class="text-3xl font-bold mb-4 text-[#5d0000] text-center">Active Orders</h2>
+        <div id="summary-list" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Tally will be injected here -->
+        </div>
+        <div class="text-center mt-6">
+            <button onclick="clearAllOrders()" class="text-xs text-[#8b0000] underline opacity-60 hover:opacity-100">Reset All Orders</button>
+        </div>
+    </section>
+
     <main id="menu-grid" class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         <!-- Cards injected by JS -->
     </main>
@@ -90,8 +113,14 @@
         <div class="modal-content rounded-lg shadow-2xl relative p-6 md:p-10" onclick="event.stopPropagation()">
             <button class="close-btn absolute top-4 right-6 hover:scale-110 transition-transform" onclick="closeModal()">×</button>
             
-            <div id="modal-details" class="flex flex-col md:flex-row gap-8">
+            <div id="modal-details" class="flex flex-col md:flex-row gap-8 mb-8">
                 <!-- Details injected by JS -->
+            </div>
+
+            <div class="border-t border-[#d3c6a6] pt-6 flex justify-center">
+                <button id="place-order-btn" class="bg-[#8b0000] text-white px-10 py-3 rounded-full text-xl font-bold hover:bg-[#5d0000] transform active:scale-95 transition-all shadow-lg">
+                    Place Order
+                </button>
             </div>
         </div>
     </div>
@@ -100,7 +129,21 @@
         <p>&copy; 2024 The Watercolor Bar. Crafted with passion.</p>
     </footer>
 
-    <script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let currentUser = null;
+
         const drinks = [
             { id: "sex_on_the_beach", name: "Sex on the Beach", ingredients: ["1.5 oz Vodka", "0.5 oz Peach Schnapps", "2 oz Orange juice", "2 oz Cranberry juice"], instructions: "Combine all ingredients in a shaker with ice. Shake well and strain into a highball glass. Garnish with an orange slice." },
             { id: "mojito", name: "Mojito", ingredients: ["2 oz White Rum", "1 oz Lime juice", "2 tsp Sugar", "6-8 Mint leaves", "Soda water"], instructions: "Muddle mint and sugar with lime juice. Add rum and top with soda water and crushed ice. Garnish with more mint." },
@@ -119,11 +162,30 @@
         const grid = document.getElementById('menu-grid');
         const modal = document.getElementById('modal');
         const modalDetails = document.getElementById('modal-details');
+        const summarySection = document.getElementById('order-summary');
+        const summaryList = document.getElementById('summary-list');
 
-        // Render the Grid
+        // Auth Setup
+        async function initAuth() {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                setupOrderListener();
+            }
+        });
+
+        // Initialize Menu
         function renderMenu() {
             grid.innerHTML = drinks.map(drink => `
-                <div class="drink-card p-4 rounded-lg flex flex-col items-center cursor-pointer" onclick="openModal('${drink.id}')">
+                <div class="drink-card p-4 rounded-lg flex flex-col items-center cursor-pointer relative" onclick="window.openDrinkModal('${drink.id}')">
+                    <div id="badge-${drink.id}" class="order-badge hidden">0</div>
                     <div class="w-full aspect-[4/5] overflow-hidden rounded mb-4 bg-white/50">
                         <img src="${drink.id}.jpg" alt="${drink.name}" class="w-full h-full object-contain" onerror="this.src='https://via.placeholder.com/300x400?text=${drink.name.replace(/ /g, '+')}'">
                     </div>
@@ -132,7 +194,7 @@
             `).join('');
         }
 
-        function openModal(id) {
+        window.openDrinkModal = function(id) {
             const drink = drinks.find(d => d.id === id);
             if (!drink) return;
 
@@ -154,17 +216,101 @@
                     </div>
                 </div>
             `;
+            
+            const orderBtn = document.getElementById('place-order-btn');
+            orderBtn.onclick = () => placeOrder(drink);
+            orderBtn.innerText = `Order ${drink.name}`;
+            
             modal.style.display = 'flex';
-            document.body.style.overflow = 'hidden'; // Stop scrolling
-        }
+            document.body.style.overflow = 'hidden';
+        };
 
-        function closeModal() {
+        window.closeModal = function(event) {
             modal.style.display = 'none';
-            document.body.style.overflow = 'auto'; // Resume scrolling
+            document.body.style.overflow = 'auto';
+        };
+
+        // Order Logic
+        async function placeOrder(drink) {
+            if (!currentUser) return;
+            try {
+                const btn = document.getElementById('place-order-btn');
+                btn.disabled = true;
+                btn.innerText = "Ordering...";
+                
+                const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+                await addDoc(ordersCol, {
+                    drinkId: drink.id,
+                    drinkName: drink.name,
+                    timestamp: serverTimestamp(),
+                    userId: currentUser.uid
+                });
+                
+                btn.innerText = "Success! ✨";
+                setTimeout(() => {
+                    closeModal();
+                    btn.disabled = false;
+                }, 800);
+            } catch (err) {
+                console.error(err);
+                alert("Could not place order. Please try again.");
+            }
         }
 
-        // Initialize
+        function setupOrderListener() {
+            const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+            onSnapshot(ordersCol, (snapshot) => {
+                const tallies = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    tallies[data.drinkId] = (tallies[data.drinkId] || 0) + 1;
+                });
+                updateOrderSummary(tallies);
+            }, (error) => console.error("Listener error:", error));
+        }
+
+        function updateOrderSummary(tallies) {
+            const totalOrders = Object.values(tallies).reduce((a, b) => a + b, 0);
+            
+            if (totalOrders > 0) {
+                summarySection.classList.remove('hidden');
+                summaryList.innerHTML = Object.entries(tallies).map(([id, count]) => {
+                    const drink = drinks.find(d => d.id === id);
+                    return `
+                        <div class="bg-white p-3 rounded shadow-sm border border-[#d3c6a6] flex justify-between items-center">
+                            <span class="font-bold truncate mr-2">${drink ? drink.name : id}</span>
+                            <span class="bg-[#8b0000] text-white px-2 py-1 rounded-full text-sm font-bold">${count}</span>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                summarySection.classList.add('hidden');
+            }
+
+            // Update badges on cards
+            drinks.forEach(drink => {
+                const badge = document.getElementById(`badge-${drink.id}`);
+                if (tallies[drink.id]) {
+                    badge.innerText = tallies[drink.id];
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            });
+        }
+
+        window.clearAllOrders = async function() {
+            if (!currentUser) return;
+            const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+            const qSnap = await getDocs(ordersCol);
+            const deletePromises = qSnap.docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', d.id)));
+            await Promise.all(deletePromises);
+        };
+
+        // Start everything
         renderMenu();
+        initAuth();
+
     </script>
 </body>
 </html>
